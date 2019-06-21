@@ -230,49 +230,39 @@ def convert_single_example(example, tokenize_fn):
 
 
 class InputExample(object):
-  def __init__(self, context, qa_list, label, level):
+  def __init__(self, context, qa_list, label, id_num):
     self.context = context
     self.qa_list = qa_list
     self.label = label
-    self.level = level
+    self.id = id_num
 
 
-def get_examples(data_dir, set_type):
-  examples = []
+def get_examples(input_file):
+    examples = []
+    for obj in json.load(open(input_file, 'r', encoding='utf-8'))['data']['instance']:
+        if not obj['questions']:
+            continue
+        d_id = input_file[:-10] + '_' + obj['@id']
+        try:
+            qs = [q for q in obj['questions']['question']]
+            dummy = qs[0]['@text']
+        except:
+            # some passages have only one question
+            qs = [obj['questions']['question']]
+        for q in qs:
+            q_id = q['@id']
+            swag_id_curr = d_id + '_' + q_id
+            swag_label = None
+            endings = []
+            for i, ans in enumerate(q['answer']):
+                endings.append(ans['@text'])
+                label = int(ans['@correct'].lower() == 'true') # if is_training else None
+                if label is 1:
+                    swag_label = i
 
-  for level in ["middle", "high"]:
-    if level == "middle" and FLAGS.high_only: continue
-    if level == "high" and FLAGS.middle_only: continue
-
-    cur_dir = os.path.join(data_dir, set_type, level)
-    for filename in tf.gfile.ListDirectory(cur_dir):
-      cur_path = os.path.join(cur_dir, filename)
-      with tf.gfile.Open(cur_path) as f:
-        cur_data = json.load(f)
-
-        answers = cur_data["answers"]
-        options = cur_data["options"]
-        questions = cur_data["questions"]
-        context = cur_data["article"]
-
-        for i in range(len(answers)):
-          label = ord(answers[i]) - ord("A")
-          qa_list = []
-
-          question = questions[i]
-          for j in range(4):
-            option = options[i][j]
-
-            if "_" in question:
-              qa_cat = question.replace("_", option)
-            else:
-              qa_cat = " ".join([question, option])
-
-            qa_list.append(qa_cat)
-
-          examples.append(InputExample(context, qa_list, label, level))
-
-  return examples
+            qa_list = [q['@text'].strip() + " " + endings[0], q['@text'].strip() + " " + endings[1]]
+            examples.append(InputExample(obj['text'], qa_list, swag_label, swag_id_curr))
+    return examples
 
 
 def file_based_convert_examples_to_features(examples, tokenize_fn, output_file):
@@ -489,7 +479,7 @@ def main(_):
     train_file = os.path.join(FLAGS.output_dir, train_file_base)
 
     if not tf.gfile.Exists(train_file) or FLAGS.overwrite_data:
-      train_examples = get_examples(FLAGS.data_dir, "train")
+      train_examples = get_examples(os.path.join(FLAGS.data_dir, "train-data.json"))
       random.shuffle(train_examples)
       file_based_convert_examples_to_features(
           train_examples, tokenize_fn, train_file)
@@ -502,7 +492,7 @@ def main(_):
     estimator.train(input_fn=train_input_fn, max_steps=FLAGS.train_steps)
 
   if FLAGS.do_eval:
-    eval_examples = get_examples(FLAGS.data_dir, FLAGS.eval_split)
+    eval_examples = get_examples(os.path.join(FLAGS.data_dir, "dev-data.json"))
     tf.logging.info("Num of eval samples: {}".format(len(eval_examples)))
 
     # TPU requires a fixed batch size for all batches, therefore the number
