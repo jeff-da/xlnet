@@ -25,8 +25,8 @@ python run_race.py \
   --init_checkpoint=${INIT_CKPT_DIR}/xlnet_model.ckpt \
   --model_dir=${MODEL_DIR} \
   --data_dir=${RACE_DIR} \
-  --max_seq_length=512 \
-  --max_qa_length=128 \
+  --max_seq_length=333 \
+  --max_qa_length=64 \
   --uncased=False \
   --do_train=True \
   --train_batch_size=4 \
